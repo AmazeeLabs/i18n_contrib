@@ -1,0 +1,7 @@
+name = Synchronize node references
+description = Synchronizes node reference fields accross translations of the same content.
+dependencies[] = i18n_sync
+dependencies[] = translation
+dependencies[] = node_reference
+package = Multilingual - Internationalization
+core = 7.x
