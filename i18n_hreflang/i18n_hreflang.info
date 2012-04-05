@@ -1,0 +1,5 @@
+name = Internationalization SEO hreflang
+description = Provides hreflang support for multilingual sites.
+dependencies[] = i18n
+package = Multilingual - Internationalization
+core = 7.x
