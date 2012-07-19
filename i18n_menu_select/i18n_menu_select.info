@@ -1,0 +1,6 @@
+name = Multilingual select menu filter
+description = Filters node items from menus by language using node access (Unsupported module, just for backwards compatibility)
+dependencies[] = i18n_menu
+dependencies[] = i18n_select
+package = Multilingual - Internationalization
+core = 7.x
