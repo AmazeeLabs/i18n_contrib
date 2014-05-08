@@ -8,6 +8,7 @@
  * Implements hook_init().
  */
 function i18n_hreflang_init() {
+  global $language;
   // Get path and translations
   $path = drupal_is_front_page() ? '<front>' : $_GET['q'];
   $translations = i18n_get_path_translations($path);
@@ -15,17 +16,27 @@ function i18n_hreflang_init() {
   $languages = language_list('enabled');
   // remove all disabled translations
   if (!empty($languages[0])){
-    foreach ($languages[0] as $language) {
-      unset($translations[$language->language]);
+    foreach ($languages[0] as $_language) {
+      unset($translations[$_language->language]);
     }
   }
   // Get alternate urls if we've got translations.
   if ($translations) {
+    $href_lang_def = variable_get('i18n_hreflang_default', '');
     foreach($translations as $lang => $translation) {
+      $hreflang = $lang;
+      // If the current language is the active language, then show 'x';
+      if ($language->language == $lang) {
+        $hreflang = 'x';
+      }
+      // If the $lang is the default language, then show 'x-default';
+      if ($lang == $href_lang_def) {
+        $hreflang = 'x-default';
+      }
       $attributes = array(
         'href' => url($translation['href'], $translation + array('language' => i18n_language($lang))),
         'rel' => 'alternate',
-        'hreflang' => $lang,
+        'hreflang' => $hreflang,
       );
       drupal_add_html_head_link($attributes);
     }
@@ -33,8 +44,23 @@ function i18n_hreflang_init() {
 }
 
 /**
+ * Implements hook_menu().
+ */
+function i18n_hreflang_menu() {
+  $items['admin/config/regional/language/hreflang'] = array(
+    'title' => 'HrefLang settings',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer languages'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('i18n_hreflang_admin'),
+    'file' => 'i18n_hreflang.admin.inc'
+  );
+  return $items;
+}
+
+/**
  * Implements hook_i18n_translate_path().
- * 
+ *
  * Provides translation for front page.
  */
 function i18n_hreflang_i18n_translate_path($path) {
