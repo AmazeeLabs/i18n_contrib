@@ -8,10 +8,21 @@
  * Implements hook_init().
  */
 function i18n_hreflang_init() {
-  global $language;
+  global $language, $_domain;
   // Get path and translations
   $path = drupal_is_front_page() ? '<front>' : $_GET['q'];
   $translations = i18n_get_path_translations($path);
+
+  // If the links are nodes, then we have to recreate the list, because not all
+  // the translations will be returned, due to domain access settings.
+  i18n_hreflang_alter_nodes_translations($translations, $path);
+
+  // If no translations were found, then this is not a special URL (node,
+  // taxonomy, etc..), so just use every language for it.
+  if (empty($translations)) {
+    $translations = i18n_hreflang_get_all_translation_paths($path);
+    drupal_alter('i18n_translate_path', $translations, $path);
+  }
   // Get disabled languages
   $languages = language_list('enabled');
   // remove all disabled translations
@@ -24,21 +35,25 @@ function i18n_hreflang_init() {
   if ($translations) {
     $href_lang_def = variable_get('i18n_hreflang_default', '');
     foreach($translations as $lang => $translation) {
-      $hreflang = $lang;
-      // If the current language is the active language, then show 'x';
-      if ($language->language == $lang) {
-        $hreflang = 'x';
+      // Check if the user has access to the menu.
+      $access = i18n_hreflang_check_access($translation, $lang);
+      if ($access) {
+        $hreflang = $lang;
+        // If the current language is the active language, then show 'x';
+        if ($language->language == $lang) {
+          $hreflang = 'x';
+        }
+        // If the $lang is the default language, then show 'x-default';
+        if ($lang == $href_lang_def) {
+          $hreflang = 'x-default';
+        }
+        $attributes = array(
+          'href' => url($translation['href'], $translation + array('language' => i18n_language($lang), 'absolute' => TRUE)),
+          'rel' => 'alternate',
+          'hreflang' => $hreflang,
+        );
+        drupal_add_html_head_link($attributes);
       }
-      // If the $lang is the default language, then show 'x-default';
-      if ($lang == $href_lang_def) {
-        $hreflang = 'x-default';
-      }
-      $attributes = array(
-        'href' => url($translation['href'], $translation + array('language' => i18n_language($lang))),
-        'rel' => 'alternate',
-        'hreflang' => $hreflang,
-      );
-      drupal_add_html_head_link($attributes);
     }
   }
 }
@@ -65,16 +80,146 @@ function i18n_hreflang_menu() {
  */
 function i18n_hreflang_i18n_translate_path($path) {
   if ($path == '<front>') {
-    $languages = language_list('enabled');
-    $links = array();
-    foreach ($languages[1] as $language) {
-      $links[$language->language] = array(
-        'href'       => $path,
-        'title'      => $language->native,
-      );
-    }
-    return $links;
+    // For the moment, just call this function. It could be that the
+    // implementation of the following function changes. In this case, we will
+    // need to refactor.
+    i18n_hreflang_get_all_translation_paths($path);
   }
+}
+
+/**
+ * Returns all translation for the current path.
+ *
+ * This is used when the path is not a special one (node page, taxonomy, etc..)
+ */
+function i18n_hreflang_get_all_translation_paths($path) {
+  // Make sure that when changes are made in this function, they do not affect
+  // the behavior of the i18n_hreflang_i18n_translate_path().
+  $languages = language_list('enabled');
+  $links = array();
+  foreach ($languages[1] as $language) {
+    // hack: Ignore the system language.
+    if ($language->language == 'en') {
+      continue;
+    }
+    $links[$language->language] = array(
+      'href'       => $path,
+      'title'      => $language->native,
+    );
+  }
+  return $links;
+}
+
+/**
+ * Alter the node translations, when displaying them in the metainformation of
+ * the page.
+ *
+ * We do not use the hook_i18n_translate_path_alter() because we don't want this
+ * to apply all the time, but only when it is called from the hook_init(), so
+ * only when it is displayed in the meta.
+ *
+ * The issue that this function solves is that it shows also the translations
+ * which are assigned on other domains. So they are not accessible from the
+ * current domain, and then translation_node_get_translations() call in the
+ * i18n_node_i18n_translate_path() function will skip them, because it checks
+ * the node access.
+ *
+ * @param array $translations
+ *  An array with translations initially obtained by a call to
+ *  i18n_get_path_translations().
+ *
+ * @param string $path
+ *  The path to check.
+ */
+function i18n_hreflang_alter_nodes_translations(&$translations, $path) {
+  // We only change the translations if the path belongs to a node.
+  // This is taken from the i18n_node module.
+  if (preg_match("!^node/(\d+)(/.+|)!", $path, $matches) && ($node = node_load((int) $matches[1])) && i18n_object_langcode($node) && !empty($node->tnid)) {
+    if ($node_translations = i18n_hreflang_node_get_translations($node->tnid)) {
+      $result = array();
+      foreach ($node_translations as $langcode => $node_translation) {
+        $translations[$langcode] = array(
+          'href' => 'node/' . $node_translation->nid . $matches[2],
+          'title' => $node_translation->title,
+          'object' => $node_translation,
+        );
+      }
+      drupal_alter('i18n_translate_path', $translations, $path);
+    }
+  }
+}
+
+/**
+ * Duplicates the behavior of the translation_node_get_translations() but it
+ * does not check for the node_access.
+ */
+function i18n_hreflang_node_get_translations($tnid) {
+  if (is_numeric($tnid) && $tnid) {
+    $translations = &drupal_static(__FUNCTION__, array());
+
+    if (!isset($translations[$tnid])) {
+      $translations[$tnid] = array();
+      $result = db_select('node', 'n')
+        ->fields('n', array('nid', 'type', 'uid', 'status', 'title', 'language'))
+        ->condition('n.tnid', $tnid)
+        ->execute();
+
+      foreach ($result as $node) {
+        $langcode = entity_language('node', $node);
+        $translations[$tnid][$langcode] = $node;
+      }
+    }
+    return $translations[$tnid];
+  }
+}
+
+/**
+ * Checks if an user has access to a translation (basically to an URL).
+ *
+ * @param array $translation
+ *  The translation array, return for example after a call to
+ *  i18n_get_path_translations() (actually, an element of it).
+ *
+ * @param string $lang
+ *  The language code.
+ */
+function i18n_hreflang_check_access($translation, $lang) {
+  global $language, $_domain;
+  $access = FALSE;
+  $tmp_language = $language;
+  $tmp_domain = $_domain;
+  // Change the active language and domain if needed.
+  if ($language->language != $lang) {
+    $language = i18n_language_object($lang);
+  }
+  if (!empty($_domain)) {
+    // If we have a domain variant assigned to the link, then check the domain
+    // id of it.
+    if (!empty($translation['domain_variant']) && $translation['domain_variant']->domain_id != $_domain['domain_id']) {
+      $_domain = domain_load($translation['domain_variant']->domain_id);
+    }
+    elseif (empty($translation['domain_variant'])) {
+      $default_id = domain_default_id();
+      if ($default_id != $_domain['domain_id']) {
+        $_domain = domain_load($default_id);
+      }
+    }
+  }
+
+  // Check the menu access.
+  $menu_item = menu_get_item($translation['href']);
+  // Check the access again, as this may be cached from previous calls for the
+  // same path.
+  $map = arg(NULL, $translation['href']);
+  _menu_check_access($menu_item, $map);
+  if ($menu_item['access'] === TRUE) {
+    $access = TRUE;
+  }
+
+  // Restore the values for the domain and language.
+  $_domain = $tmp_domain;
+  $language = $tmp_language;
+  return $access;
 }
 
 /**
