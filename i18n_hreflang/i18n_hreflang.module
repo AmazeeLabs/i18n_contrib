@@ -206,11 +206,11 @@ function i18n_hreflang_check_access($translation, $lang) {
     }
   }
 
-  // Check the menu access.
-  $menu_item = menu_get_item($translation['href']);
   // Check the access again, as this may be cached from previous calls for the
   // same path.
-  $map = arg(NULL, $translation['href']);
+  $path = $translation['href'] == '<front>' ? variable_get('site_frontpage', 'node') : $translation['href'];
+  $menu_item = menu_get_item($path);
+  $map = arg(NULL, $path);
   _menu_check_access($menu_item, $map);
   if ($menu_item['access'] === TRUE) {
     $access = TRUE;
