@@ -209,11 +209,17 @@ function i18n_hreflang_check_access($translation, $lang) {
   // Check the access again, as this may be cached from previous calls for the
   // same path.
   $path = $translation['href'] == '<front>' ? variable_get('site_frontpage', 'node') : $translation['href'];
-  $menu_item = menu_get_item($path);
-  $map = arg(NULL, $path);
-  _menu_check_access($menu_item, $map);
-  if ($menu_item['access'] === TRUE) {
-    $access = TRUE;
+  $original_map = arg(NULL, $path);
+  $parts = array_slice($original_map, 0, MENU_MAX_PARTS);
+  $ancestors = menu_get_ancestors($parts);
+  $router_item = db_query_range('SELECT * FROM {menu_router} WHERE path IN (:ancestors) ORDER BY fit DESC', 0, 1, array(':ancestors' => $ancestors))->fetchAssoc();
+  drupal_alter('menu_get_item', $router_item, $path, $original_map);
+  // Load the objects of the menu if needed.
+  if (!(!empty($router_item['load_functions']) && !_menu_load_objects($router_item, $original_map))) {
+    _menu_check_access($router_item, $original_map);
+    if ($router_item['access'] === TRUE) {
+      $access = TRUE;
+    }
   }
 
   // Restore the values for the domain and language.
