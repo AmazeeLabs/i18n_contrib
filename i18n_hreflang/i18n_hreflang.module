@@ -222,6 +222,18 @@ function i18n_hreflang_check_access($translation, $lang) {
     }
   }
 
+  // @todo: the code below is slower than the code above, but this would be an
+  // alternative if the code above will not work properly.
+  /*$path = $translation['href'] == '<front>' ? variable_get('site_frontpage', 'node') : $translation['href'];
+  $menu_item = menu_get_item($path);
+  $map = arg(NULL, $path);
+  _menu_check_access($menu_item, $map);
+  if (empty($menu_item['load_functions']) || _menu_load_objects($menu_item, $map)) {
+    if ($menu_item['access'] === TRUE) {
+      $access = TRUE;
+    }
+  }*/
+
   // Restore the values for the domain and language.
   $_domain = $tmp_domain;
   $language = $tmp_language;
