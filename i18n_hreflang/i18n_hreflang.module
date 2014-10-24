@@ -39,10 +39,6 @@ function i18n_hreflang_init() {
       $access = i18n_hreflang_check_access($translation, $lang);
       if ($access) {
         $hreflang = $lang;
-        // If the current language is the active language, then show 'x';
-        if ($language->language == $lang) {
-          $hreflang = 'x';
-        }
         // If the $lang is the default language, then show 'x-default';
         if ($lang == $href_lang_def) {
           $hreflang = 'x-default';
