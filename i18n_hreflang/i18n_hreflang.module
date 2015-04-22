@@ -23,6 +23,7 @@ function i18n_hreflang_init() {
     $translations = i18n_hreflang_get_all_translation_paths($path);
     drupal_alter('i18n_translate_path', $translations, $path);
   }
+
   // Get disabled languages
   $languages = language_list('enabled');
   // remove all disabled translations
@@ -34,7 +35,14 @@ function i18n_hreflang_init() {
   // Get alternate urls if we've got translations.
   if ($translations) {
     $href_lang_def = variable_get('i18n_hreflang_default', '');
+    $enabled_href_langs = array_filter(variable_get('i18n_hreflang_enabled_languages', array()));
     foreach($translations as $lang => $translation) {
+      // If this language is not enabled for the hreflang, just skip it. If the
+      // array of enabled languages is empty, it means that we allow all
+      // languages.
+      if (!empty($enabled_href_langs) && empty($enabled_href_langs[$lang])) {
+        continue;
+      }
       // Check if the user has access to the menu.
       $access = i18n_hreflang_check_access($translation, $lang);
       if ($access) {
@@ -94,10 +102,6 @@ function i18n_hreflang_get_all_translation_paths($path) {
   $languages = language_list('enabled');
   $links = array();
   foreach ($languages[1] as $language) {
-    // hack: Ignore the system language.
-    if ($language->language == 'en') {
-      continue;
-    }
     $links[$language->language] = array(
       'href'       => $path,
       'title'      => $language->native,

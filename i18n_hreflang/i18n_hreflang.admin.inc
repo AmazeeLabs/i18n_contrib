@@ -20,5 +20,13 @@ function i18n_hreflang_admin($form, &$form_state) {
     '#options' => $options,
     '#default_value' => variable_get('i18n_hreflang_default', ''),
   );
+  $form['i18n_hreflang_enabled_languages'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Enabled languages'),
+    '#options' => $options,
+    '#multiple' => TRUE,
+    '#default_value' => variable_get('i18n_hreflang_enabled_languages', array()),
+    '#description' => t('Select which languages should be enabled for the hreflang tags. Leave empty for all.')
+  );
   return system_settings_form($form);
 }
